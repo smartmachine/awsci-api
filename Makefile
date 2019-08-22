@@ -7,7 +7,7 @@ LDFLAGS := -ldflags "-X=go.smartmachine.io/awsci-api/main.Version=$(VERSION) -X=
 TEST_STAMP := .test.stamp
 
 .phony: all
-all: dep test build ## Generate and build everything
+all: dep test build zip ## Generate and build everything
 
 .phony: test
 test: $(TEST_STAMP) ## Run unit tests
@@ -24,15 +24,21 @@ $(TEST_STAMP): $(GOFILES)
 
 awsci-api: $(GOFILES)
 	$(info Compiling project)
-	@go build -v $(LDFLAGS) $(GOOS) $(GOARCH)
+	@$(GOOS) $(GOARCH) go build -v $(LDFLAGS)
 
 .phony: build
 build: awsci-api ## Build all binary artifacts
 
+awsci-api.zip: awsci-api
+	@zip awsci-api.zip awsci-api
+
+.phony: zip
+zip: awsci-api.zip ## Package the Lambda for distribution
+
 .phony: clean
 clean: ## Clean all build artifacts
 	$(info Cleaning all build artifacts)
-	@rm -rf awsci-api .test.stamp
+	@rm -rf awsci-api .test.stamp awsci-api.zip
 	@go clean
 
 .phony: veryclean
