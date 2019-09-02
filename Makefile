@@ -6,6 +6,10 @@ GOARCH := GOARCH=amd64
 LDFLAGS := -ldflags "-X=go.smartmachine.io/awsci-api/main.Version=$(VERSION) -X=go.smartmachine.io/awsci-api/main.Commit=$(COMMIT)"
 TEST_STAMP := .test.stamp
 
+SOURCES := $(wildcard fn/*)
+BINARIES := $(subst fn/,,$(SOURCES))
+ZIPS := $(addsuffix .zip,$(BINARIES))
+
 .phony: all
 all: dep build zip ## Generate and build everything
 
@@ -15,30 +19,37 @@ test: $(TEST_STAMP) ## Run unit tests
 .phony: dep
 dep: ## Make sure all dependencies are up to date
 	@go mod tidy
-	@go mod vendor
 
 $(TEST_STAMP): $(GOFILES)
 	$(info Running unit tests)
 	@go test ./...
 	@touch $@
 
-login: $(GOFILES)
-	$(info Compiling Login Lambda)
-	@$(GOOS) $(GOARCH) go build -v $(LDFLAGS) ./fn/login
+$(BINARIES): %: fn/%/main.go
+	$(info Compiling $@ Lambda)
+	@$(GOOS) $(GOARCH) go build -v $(LDFLAGS) ./fn/$@
+
+$(ZIPS): %.zip: %
+	$(info Packaging $@)
+	@zip $@ $<
+
+
+.phony: debug
+debug: ## Test auto binary functionality
+	@echo Sources: $(SOURCES)
+	@echo Binaries: $(BINARIES)
+	@echo Zips: $(ZIPS)
 
 .phony: build
-build: login ## Build all binary artifacts
-
-login.zip: login
-	@zip login.zip login
+build: $(BINARIES) ## Build all binary artifacts
 
 .phony: zip
-zip: login.zip ## Package the Lambda for distribution
+zip: $(ZIPS) ## Package the Lambda functions for distribution
 
 .phony: clean
 clean: ## Clean all build artifacts
 	$(info Cleaning all build artifacts)
-	@rm -rf login .test.stamp login.zip
+	@rm -rf $(BINARIES) $(ZIPS) .test.stamp
 	@go clean
 
 .phony: veryclean

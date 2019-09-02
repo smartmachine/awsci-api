@@ -1,7 +1,7 @@
 .test.stamp
 vendor
-awsci-api
-awsci-api.zip
 login
 login.zip
+cloudformation
+cloudformation.zip
 .idea
