@@ -40,10 +40,8 @@ debug: ## Test auto binary functionality
 	@echo Binaries: $(BINARIES)
 	@echo Zips: $(ZIPS)
 
-.phony: build
 build: $(BINARIES) ## Build all binary artifacts
 
-.phony: zip
 zip: $(ZIPS) ## Package the Lambda functions for distribution
 
 .phony: clean
