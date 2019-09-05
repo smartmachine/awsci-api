@@ -27,18 +27,11 @@ $(TEST_STAMP): $(GOFILES)
 
 $(BINARIES): %: fn/%/main.go
 	$(info Compiling $@ Lambda)
-	@$(GOOS) $(GOARCH) go build -v $(LDFLAGS) ./fn/$@
+	@$(GOOS) $(GOARCH) go build $(LDFLAGS) ./fn/$@
 
 $(ZIPS): %.zip: %
 	$(info Packaging $@)
 	@zip $@ $<
-
-
-.phony: debug
-debug: ## Test auto binary functionality
-	@echo Sources: $(SOURCES)
-	@echo Binaries: $(BINARIES)
-	@echo Zips: $(ZIPS)
 
 build: $(BINARIES) ## Build all binary artifacts
 
