@@ -16,7 +16,13 @@ import (
 func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID string, data map[string]interface{}, err error) {
 	log.Printf("Event Received: %+v", event)
 
-	sess := session.New()
+	sess := &session.Session{}
+	sess, err = session.NewSession()
+
+	if err != nil {
+		logAWSError("AWS Session Error: %+v", err)
+		return
+	}
 
 	certArn := event.ResourceProperties["CertificateArn"].(string)
 	authDomain := event.ResourceProperties["AuthDomain"].(string)
