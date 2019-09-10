@@ -3,12 +3,12 @@ COMMIT := $(shell git rev-parse --short HEAD)
 GOFILES := $(shell find . -not -path './vendor*' -type f -name '*.go')
 GOOS := GOOS=linux
 GOARCH := GOARCH=amd64
-LDFLAGS := -ldflags "-X=go.smartmachine.io/awsci-api/main.Version=$(VERSION) -X=go.smartmachine.io/awsci-api/main.Commit=$(COMMIT)"
 TEST_STAMP := .test.stamp
 
-SOURCES := $(wildcard fn/*)
-BINARIES := $(subst fn/,,$(SOURCES))
-ZIPS := $(addsuffix .zip,$(BINARIES))
+SOURCES = $(wildcard fn/*/*/main.go)
+BINPATHS = $(subst /main.go,,$(subst fn/,,$(SOURCES)))
+BINARIES = $(subst /,-,$(BINPATHS))
+ZIPS = $(addsuffix .zip,$(BINARIES))
 
 .phony: all
 all: dep build zip ## Generate and build everything
@@ -25,9 +25,10 @@ $(TEST_STAMP): $(GOFILES)
 	@go test ./...
 	@touch $@
 
-$(BINARIES): %: fn/%/main.go
-	$(info Compiling $@ Lambda)
-	@$(GOOS) $(GOARCH) go build $(LDFLAGS) ./fn/$@
+.SECONDEXPANSION:
+$(BINARIES): fn/$$(subst -,/,$$@)/main.go
+	$(info Compiling $@ lambda)
+	@$(GOOS) $(GOARCH) go build -o $@ ./$(subst /main.go,,$<)
 
 $(ZIPS): %.zip: %
 	$(info Packaging $@)

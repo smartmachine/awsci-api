@@ -1,9 +1,11 @@
 .test.stamp
 vendor
-login
-login.zip
-cloudformation
-cloudformation.zip
-invalidation
-invalidation.zip
 .idea
+
+# Binaries and artifacts
+cloudformation-cognito
+cloudformation-cognito.zip
+cognito-info
+cognito-info.zip
+github-login
+github-login.zip

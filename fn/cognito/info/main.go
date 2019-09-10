@@ -25,13 +25,11 @@ type LoginResponse struct {
 
 type Session struct {
 	SessionId string `json:"session_id"`
-	Login     string `json:"login"`
+	Login     string `json:"github"`
 	AuthToken string `json:"auth_token"`
 }
 
-
-
-func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
+func ClientInfo(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 	log.Printf("request: %+v", request)
 
 	if request.Code == "" {
@@ -95,5 +93,5 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 }
 
 func main() {
-	lambda.Start(Login)
+	lambda.Start(ClientInfo)
 }
