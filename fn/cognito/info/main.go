@@ -4,91 +4,59 @@ import (
 	"context"
 	"fmt"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/google/go-github/v28/github"
-	"github.com/satori/go.uuid"
+	"github.com/aws/aws-sdk-go/service/ssm"
 	"go.smartmachine.io/awsci-api/pkg/util"
-	"golang.org/x/oauth2"
 	"log"
 )
 
-type LoginRequest struct {
-	Code string `json:"code"`
+
+
+type ClientInfoResponse struct {
+	ClientId *string `json:"client_id"`
+	CallbackURL *string `json:"callback_url"`
 }
 
-type LoginResponse struct {
-	User    string `json:"user"`
-	Session string `json:"session"`
-}
-
-type Session struct {
-	SessionId string `json:"session_id"`
-	Login     string `json:"github"`
-	AuthToken string `json:"auth_token"`
-}
-
-func ClientInfo(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
+func ClientInfo(ctx context.Context, request interface{}) (*ClientInfoResponse, error) {
 	log.Printf("request: %+v", request)
-
-	if request.Code == "" {
-		return nil, util.NewError("code is invalid", 400)
-	}
-
-	token, err := util.AwsCiConf.Exchange(oauth2.NoContext, request.Code)
-	if err != nil {
-		return nil, util.NewError(fmt.Sprintf("oauth2.Exchange failed: %+v", err), 400)
-	}
-
-	log.Printf("obtained token: %+v", token)
-
-	tokenSource := util.AwsCiConf.TokenSource(oauth2.NoContext, token)
-	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	client := github.NewClient(oauthClient)
-
-	user, _, err := client.Users.Get(context.Background(), "")
-	if err != nil {
-		return nil, util.NewError(fmt.Sprintf("github.Users.Get failed: %+v", err), 400)
-	}
-
-
-	curTok, err := tokenSource.Token()
-	if err != nil {
-		return nil, util.NewError(fmt.Sprintf("tokensource error: %+v", err), 400)
-	}
-
-	log.Printf("current token: %+v", curTok )
 
 	sess := session.Must(session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
 	}))
 
-	sessionId := uuid.NewV4().String()
+	ssmSvc := ssm.New(sess)
 
-	ciSession := Session{
-		Login:     *user.Login,
-		AuthToken: curTok.AccessToken,
-		SessionId: sessionId,
+	getParametersRequest := &ssm.GetParametersInput{
+		Names:          []*string{
+			aws.String("/cognito/client/id"),
+			aws.String("/cognito/client/callbackUrl"),
+		},
+		WithDecryption: aws.Bool(false),
 	}
 
-	item, err := dynamodbattribute.MarshalMap(ciSession)
+	log.Printf("ssm.GetParametersRequest: %+v", getParametersRequest)
 
-	db := dynamodb.New(sess)
-	tableName := "sessions"
-	_, err = db.PutItem(&dynamodb.PutItemInput{
-		Item:     item,
-		TableName: &tableName,
-	})
-
+	getParametersResponse, err := ssmSvc.GetParameters(getParametersRequest)
 	if err != nil {
-		return nil, util.NewError(fmt.Sprintf("dynamodb.PutItem error: %+v", err), 400)
+		util.LogAWSError("ssm.GetParameters error: %+v", err)
+		return nil, util.NewError(fmt.Sprintf("ssm.GetParameters error: %+v", err), 400)
 	}
 
-	return &LoginResponse{
-		User:    *user.Login,
-		Session: sessionId,
-	}, nil
+	log.Printf("ssm.GetParametersResponse: %+v", getParametersResponse)
+
+	response := &ClientInfoResponse{}
+
+	for _, param := range getParametersResponse.Parameters {
+		switch *param.Name {
+		case "/cognito/client/id":
+			response.ClientId = param.Value
+		case "/cognito/client/callbackUrl":
+			response.CallbackURL = param.Value
+		}
+	}
+
+	return response, nil
 
 }
 

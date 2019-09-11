@@ -6,10 +6,10 @@ import (
 	"github.com/aws/aws-lambda-go/cfn"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go/service/route53"
+	"go.smartmachine.io/awsci-api/pkg/util"
 	"log"
 )
 
@@ -20,7 +20,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 	sess, err = session.NewSession()
 
 	if err != nil {
-		logAWSError("AWS Session Error: %+v", err)
+		util.LogAWSError("AWS Session Error: %+v", err)
 		return
 	}
 
@@ -31,6 +31,8 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 	userPoolClientId := event.ResourceProperties["UserPoolClientId"].(string)
 	callbackUrl := event.ResourceProperties["CallbackUrl"].(string)
 	logoutUrl := event.ResourceProperties["LogoutUrl"].(string)
+
+	physicalResourceID = userPoolClientId
 
 	switch event.RequestType {
 	case cfn.RequestCreate:
@@ -50,7 +52,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 		createUserPoolDomainResponse, err = cognitoSvc.CreateUserPoolDomain(createUserPoolDomainRequest)
 
 		if err != nil {
-			logAWSError("Cognito CreateUserPoolDomain Error: %+v", err)
+			util.LogAWSError("Cognito CreateUserPoolDomain Error: %+v", err)
 			return
 		}
 
@@ -75,7 +77,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 		updateClientResponse, err = cognitoSvc.UpdateUserPoolClient(updateClientRequest)
 
 		if err != nil {
-			logAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
+			util.LogAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
 			return
 		}
 
@@ -92,7 +94,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		listHostedZonesResponse, err = route53Svc.ListHostedZonesByName(listHostedZonesRequest)
 		if err != nil {
-			logAWSError("Route53 ListHostedZonesByName Error: %+v", err)
+			util.LogAWSError("Route53 ListHostedZonesByName Error: %+v", err)
 			return
 		}
 
@@ -132,7 +134,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		changeResourceRecordResponse, err = route53Svc.ChangeResourceRecordSets(changeResourceRecordRequest)
 		if err != nil {
-			logAWSError("Route53 ChangeResourceRecordSets Error: %+v", err)
+			util.LogAWSError("Route53 ChangeResourceRecordSets Error: %+v", err)
 			return
 		}
 
@@ -166,11 +168,19 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 		updateClientResponse, err = cognitoSvc.UpdateUserPoolClient(updateClientRequest)
 
 		if err != nil {
-			logAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
+			util.LogAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
 			return
 		}
 
 		log.Printf("Cognito UpdateUserPoolClient Response: %+v", updateClientResponse)
+
+		emptyString := ""
+
+		data = map[string]interface{}{
+			"CloudFrontDomain":    emptyString,
+			"RecordChangeStatus":  emptyString,
+			"RecordChangeComment": emptyString,
+		}
 
 	case cfn.RequestDelete:
 		route53Svc := route53.New(sess)
@@ -184,7 +194,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		listHostedZonesResponse, err = route53Svc.ListHostedZonesByName(listHostedZonesRequest)
 		if err != nil {
-			logAWSError("Route53 ListHostedZones Error: %+v", err)
+			util.LogAWSError("Route53 ListHostedZones Error: %+v", err)
 			return
 		}
 
@@ -208,7 +218,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		describeUserPoolDomainResponse, err = cognitoSvc.DescribeUserPoolDomain(describeUserPoolDomainRequest)
 		if err != nil {
-			logAWSError("Cognito DescribeUserPoolDomain Error: %+v", err)
+			util.LogAWSError("Cognito DescribeUserPoolDomain Error: %+v", err)
 		}
 
 		log.Printf("Cognito DescribeUserPoolDomain Response: %+v", describeUserPoolDomainResponse)
@@ -240,7 +250,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		changeResourceRecordResponse, err = route53Svc.ChangeResourceRecordSets(changeResourceRecordRequest)
 		if err != nil {
-			logAWSError("Route53 ChangeResourceRecordSets Error: %+v", err)
+			util.LogAWSError("Route53 ChangeResourceRecordSets Error: %+v", err)
 			return
 		}
 
@@ -265,7 +275,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 		updateClientResponse, err = cognitoSvc.UpdateUserPoolClient(updateClientRequest)
 
 		if err != nil {
-			logAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
+			util.LogAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
 			return
 		}
 
@@ -281,7 +291,7 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		deleteUserPoolDomainResponse, err = cognitoSvc.DeleteUserPoolDomain(deleteUserPoolDomainRequest)
 		if err != nil {
-			logAWSError("Cognito DeleteUserPoolDomain Error: %+v", err)
+			util.LogAWSError("Cognito DeleteUserPoolDomain Error: %+v", err)
 			return
 		}
 
@@ -302,12 +312,4 @@ func extractZoneId(zones *route53.ListHostedZonesByNameOutput, domain string) (s
 
 func main() {
 	lambda.Start(cfn.LambdaWrap(cognitoResource))
-}
-
-func logAWSError(format string, err error, v ...interface{}) {
-	if aerr, ok := err.(awserr.Error); ok {
-		log.Printf(format, aerr, v)
-	} else {
-		log.Printf(format, err, v)
-	}
 }
