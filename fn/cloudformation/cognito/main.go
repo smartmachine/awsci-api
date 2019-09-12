@@ -9,18 +9,24 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	cognito "github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go/service/route53"
-	"go.smartmachine.io/awsci-api/pkg/util"
-	"log"
+	"github.com/fatih/structs"
+	"go.uber.org/zap"
 )
 
 func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID string, data map[string]interface{}, err error) {
-	log.Printf("Event Received: %+v", event)
+
+	// Setup structured logging
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+	log := logger.Sugar().With("RequestID", event.RequestID)
+
+	log.Infow("event received", "Event", event)
 
 	sess := &session.Session{}
 	sess, err = session.NewSession()
 
 	if err != nil {
-		util.LogAWSError("AWS Session Error: %+v", err)
+		log.Errorw("AWS session error", "Error", err)
 		return
 	}
 
@@ -47,16 +53,16 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			UserPoolId: &userPoolId,
 		}
 
-		log.Printf("Cognito CreateUserPoolDomain Request: %+v", createUserPoolDomainRequest)
+		log.Infow("Cognito CreateUserPoolDomain Request", "Request", structs.Map(createUserPoolDomainRequest))
 
 		createUserPoolDomainResponse, err = cognitoSvc.CreateUserPoolDomain(createUserPoolDomainRequest)
 
 		if err != nil {
-			util.LogAWSError("Cognito CreateUserPoolDomain Error: %+v", err)
+			log.Errorw("Cognito CreateUserPoolDomain Error", "Error", err)
 			return
 		}
 
-		log.Printf("Cognito CreateUserPoolDomain Response: %+v", createUserPoolDomainResponse)
+		log.Infow("Cognito CreateUserPoolDomain Response", "Response", structs.Map(createUserPoolDomainResponse))
 
 		updateClientResponse := &cognito.UpdateUserPoolClientOutput{}
 		updateClientRequest := &cognito.UpdateUserPoolClientInput{
@@ -72,16 +78,16 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			AllowedOAuthFlowsUserPoolClient: aws.Bool(true),
 		}
 
-		log.Printf("Cognito UpdateUserPoolClient Request: %+v", updateClientRequest)
+		log.Infow("Cognito UpdateUserPoolClient Request", "Request", structs.Map(updateClientRequest))
 
 		updateClientResponse, err = cognitoSvc.UpdateUserPoolClient(updateClientRequest)
 
 		if err != nil {
-			util.LogAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
+			log.Errorw("Cognito UpdateUserPoolClient Error", "Error", err)
 			return
 		}
 
-		log.Printf("Cognito UpdateUserPoolClient Response: %+v", updateClientResponse)
+		log.Infow("Cognito UpdateUserPoolClient Response", "Response", structs.Map(updateClientResponse))
 
 		route53Svc := route53.New(sess)
 
@@ -90,20 +96,20 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			DNSName: aws.String(baseDomain + "."),
 		}
 
-		log.Printf("Route53 ListHostedZonesByName Request: %+v", listHostedZonesRequest)
+		log.Infow("Route53 ListHostedZonesByName Request", "Request", structs.Map(listHostedZonesRequest))
 
 		listHostedZonesResponse, err = route53Svc.ListHostedZonesByName(listHostedZonesRequest)
 		if err != nil {
-			util.LogAWSError("Route53 ListHostedZonesByName Error: %+v", err)
+			log.Errorw("Route53 ListHostedZonesByName Error", "Error", err)
 			return
 		}
 
-		log.Printf("ListHostedZones Response: %+v", listHostedZonesResponse)
+		log.Infow("Route53 ListHostedZones Response", "Response", structs.Map(listHostedZonesResponse))
 
 		zoneId := ""
 		zoneId, err = extractZoneId(listHostedZonesResponse, baseDomain)
 		if err != nil {
-			log.Printf("extractZoneId: %+v", err)
+			log.Errorw("Route53 Zone Extraction Error", "Error", err)
 			return
 		}
 
@@ -130,20 +136,18 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			HostedZoneId: &zoneId,
 		}
 
-		log.Printf("Route53 ChangeResourceRecordSets Request: %+v", changeResourceRecordRequest)
+		log.Infow("Route53 ChangeResourceRecordSets Request", "Request", structs.Map(changeResourceRecordRequest))
 
 		changeResourceRecordResponse, err = route53Svc.ChangeResourceRecordSets(changeResourceRecordRequest)
 		if err != nil {
-			util.LogAWSError("Route53 ChangeResourceRecordSets Error: %+v", err)
+			log.Errorw("Route53 ChangeResourceRecordSets Error", "Error", err)
 			return
 		}
 
-		log.Printf("Route53 ChangeResourceRecordSets Response: %+v", changeResourceRecordResponse)
+		log.Infow("Route53 ChangeResourceRecordSets Response", "Response", structs.Map(changeResourceRecordResponse))
 
 		data = map[string]interface{}{
-			"CloudFrontDomain":    *createUserPoolDomainResponse.CloudFrontDomain,
-			"RecordChangeStatus":  *changeResourceRecordResponse.ChangeInfo.Status,
-			"RecordChangeComment": *changeResourceRecordResponse.ChangeInfo.Comment,
+			"message": "custom resource created",
 		}
 
 	case cfn.RequestUpdate:
@@ -163,23 +167,19 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			AllowedOAuthFlowsUserPoolClient: aws.Bool(true),
 		}
 
-		log.Printf("Cognito UpdateUserPoolClient Request: %+v", updateClientRequest)
+		log.Infow("Cognito UpdateUserPoolClient Request", "Request", structs.Map(updateClientRequest))
 
 		updateClientResponse, err = cognitoSvc.UpdateUserPoolClient(updateClientRequest)
 
 		if err != nil {
-			util.LogAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
+			log.Errorw("Cognito UpdateUserPoolClient Error", "Error", err)
 			return
 		}
 
-		log.Printf("Cognito UpdateUserPoolClient Response: %+v", updateClientResponse)
-
-		emptyString := ""
+		log.Infow("Cognito UpdateUserPoolClient Response", "Response", structs.Map(updateClientResponse))
 
 		data = map[string]interface{}{
-			"CloudFrontDomain":    emptyString,
-			"RecordChangeStatus":  emptyString,
-			"RecordChangeComment": emptyString,
+			"message": "custom resource updated",
 		}
 
 	case cfn.RequestDelete:
@@ -190,20 +190,20 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			DNSName: aws.String(baseDomain + "."),
 		}
 
-		log.Printf("Route53 ListHostedZones Request: %+v", listHostedZonesRequest)
+		log.Infow("Route53 ListHostedZones Request", "Request", structs.Map(listHostedZonesRequest))
 
 		listHostedZonesResponse, err = route53Svc.ListHostedZonesByName(listHostedZonesRequest)
 		if err != nil {
-			util.LogAWSError("Route53 ListHostedZones Error: %+v", err)
+			log.Errorw("Route53 ListHostedZones Error", "Error", err)
 			return
 		}
 
-		log.Printf("Route53 ListHostedZones Response: %+v", listHostedZonesResponse)
+		log.Infow("Route53 ListHostedZones Response", "Response", structs.Map(listHostedZonesResponse))
 
 		zoneId := ""
 		zoneId, err = extractZoneId(listHostedZonesResponse, baseDomain)
 		if err != nil {
-			log.Printf("extractZoneId: %+v", err)
+			log.Errorw("Route53 Zone Extraction Error", "Error", err)
 			return
 		}
 
@@ -214,14 +214,14 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			Domain: aws.String(authDomain),
 		}
 
-		log.Printf("Cognito DescribeUserPoolDomain Request: +%v", describeUserPoolDomainRequest)
+		log.Infow("Cognito DescribeUserPoolDomain Request", "Request", structs.Map(describeUserPoolDomainRequest))
 
 		describeUserPoolDomainResponse, err = cognitoSvc.DescribeUserPoolDomain(describeUserPoolDomainRequest)
 		if err != nil {
-			util.LogAWSError("Cognito DescribeUserPoolDomain Error: %+v", err)
+			log.Errorw("Cognito DescribeUserPoolDomain Error", "Error", err)
 		}
 
-		log.Printf("Cognito DescribeUserPoolDomain Response: %+v", describeUserPoolDomainResponse)
+		log.Infow("Cognito DescribeUserPoolDomain Response", "Response", structs.Map(describeUserPoolDomainResponse))
 
 		changeResourceRecordResponse := &route53.ChangeResourceRecordSetsOutput{}
 		changeResourceRecordRequest := &route53.ChangeResourceRecordSetsInput{
@@ -246,15 +246,15 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			HostedZoneId: &zoneId,
 		}
 
-		log.Printf("Route53 ChangeResourceRecordSets Request: %+v", changeResourceRecordRequest)
+		log.Infow("Route53 ChangeResourceRecordSets Request", "Request", structs.Map(changeResourceRecordRequest))
 
 		changeResourceRecordResponse, err = route53Svc.ChangeResourceRecordSets(changeResourceRecordRequest)
 		if err != nil {
-			util.LogAWSError("Route53 ChangeResourceRecordSets Error: %+v", err)
+			log.Errorw("Route53 ChangeResourceRecordSets Error", "Error", err)
 			return
 		}
 
-		log.Printf("Route53 ChangeResourceRecordSets Response: %+v", changeResourceRecordResponse)
+		log.Infow("Route53 ChangeResourceRecordSets Response", "Response", structs.Map(changeResourceRecordResponse))
 
 		updateClientResponse := &cognito.UpdateUserPoolClientOutput{}
 		updateClientRequest := &cognito.UpdateUserPoolClientInput{
@@ -270,16 +270,16 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			AllowedOAuthFlowsUserPoolClient: aws.Bool(false),
 		}
 
-		log.Printf("Cognito UpdateUserPoolClient Request: %+v", updateClientRequest)
+		log.Infow("Cognito UpdateUserPoolClient Request", "Request", structs.Map(updateClientRequest))
 
 		updateClientResponse, err = cognitoSvc.UpdateUserPoolClient(updateClientRequest)
 
 		if err != nil {
-			util.LogAWSError("Cognito UpdateUserPoolClient Error: %+v", err)
+			log.Errorw("Cognito UpdateUserPoolClient Error", "Error", err)
 			return
 		}
 
-		log.Printf("Cognito UpdateUserPoolClient Response: %+v", updateClientResponse)
+		log.Infow("Cognito UpdateUserPoolClient Response", "Response", structs.Map(updateClientResponse))
 
 		deleteUserPoolDomainResponse := &cognito.DeleteUserPoolDomainOutput{}
 		deleteUserPoolDomainRequest := &cognito.DeleteUserPoolDomainInput{
@@ -287,15 +287,23 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			UserPoolId: &userPoolId,
 		}
 
-		log.Printf("Cognito DeleteUserPoolDomain Request: %+v", deleteUserPoolDomainRequest)
+		log.Infow("", "Request", )
+		log.Errorw("", "Error", err)
+		log.Infow("", "Response", )
+
+		log.Infow("Cognito DeleteUserPoolDomain Request", "Request", structs.Map(deleteUserPoolDomainRequest))
 
 		deleteUserPoolDomainResponse, err = cognitoSvc.DeleteUserPoolDomain(deleteUserPoolDomainRequest)
 		if err != nil {
-			util.LogAWSError("Cognito DeleteUserPoolDomain Error: %+v", err)
+			log.Errorw("Cognito DeleteUserPoolDomain Error", "Error", err)
 			return
 		}
 
-		log.Printf("Cognito DeleteUserPoolDomain Response: %+v", deleteUserPoolDomainResponse)
+		log.Infow("Cognito DeleteUserPoolDomain Response", "Response", structs.Map(deleteUserPoolDomainResponse))
+
+		data = map[string]interface{}{
+			"message": "custom resource deleted",
+		}
 	}
 
 	return
