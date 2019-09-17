@@ -2,7 +2,7 @@ package util
 
 import (
 	"golang.org/x/oauth2"
-	ghoauth "golang.org/x/oauth2/github"
+	ghoauth "golang.org/x/oauth2/amazon"
 )
 
 var AwsCiConf = &oauth2.Config{
