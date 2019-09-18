@@ -64,6 +64,33 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		log.Infow("Cognito CreateUserPoolDomain Response", "Response", structs.Map(createUserPoolDomainResponse))
 
+		createResourceServerResponse := &cognito.CreateResourceServerOutput{}
+		createResourceServerRequest := &cognito.CreateResourceServerInput{
+			Identifier: aws.String("https://api.awsci.io"),
+			Name:       aws.String("AWSCI Resource Server"),
+			Scopes:     []*cognito.ResourceServerScopeType{
+				{
+					ScopeDescription: aws.String("User Scope"),
+					ScopeName:        aws.String("user"),
+				},
+				{
+					ScopeDescription: aws.String("Admin Scope"),
+					ScopeName:        aws.String("admin"),
+				},
+			},
+			UserPoolId: &userPoolId,
+		}
+
+		log.Infow("Cognito CreateResourceServer Request", "Request", structs.Map(createResourceServerRequest))
+
+		createResourceServerResponse, err = cognitoSvc.CreateResourceServer(createResourceServerRequest)
+
+		if err != nil {
+			log.Errorw("Cognito CreateResourceServer Error", "Error", err)
+		}
+
+		log.Infow("Cognito CreateResourceServer Response", "Response", structs.Map(createResourceServerResponse))
+
 		updateClientResponse := &cognito.UpdateUserPoolClientOutput{}
 		updateClientRequest := &cognito.UpdateUserPoolClientInput{
 			UserPoolId:                      aws.String(userPoolId),
@@ -74,7 +101,13 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 			CallbackURLs:                    []*string{aws.String(callbackUrl)},
 			LogoutURLs:                      []*string{aws.String(logoutUrl)},
 			AllowedOAuthFlows:               []*string{aws.String(cognito.OAuthFlowTypeCode)},
-			AllowedOAuthScopes:              []*string{aws.String("openid"), aws.String("email"), aws.String("profile")},
+			AllowedOAuthScopes:              []*string{
+				aws.String("https://api.awsci.io/user"),
+				aws.String("https://api.awsci.io/admin"),
+				aws.String("email"),
+				aws.String("openid"),
+				aws.String("profile"),
+			},
 			AllowedOAuthFlowsUserPoolClient: aws.Bool(true),
 		}
 
@@ -281,15 +314,27 @@ func cognitoResource(ctx context.Context, event cfn.Event) (physicalResourceID s
 
 		log.Infow("Cognito UpdateUserPoolClient Response", "Response", structs.Map(updateClientResponse))
 
+		deleteResourceServerResponse := &cognito.DeleteResourceServerOutput{}
+		deleteResourceServerRequest := &cognito.DeleteResourceServerInput{
+			Identifier: aws.String("https://api.awsci.io"),
+			UserPoolId: &userPoolId,
+		}
+
+		log.Infow("Cognito DeleteResourceServer Request", "Request", structs.Map(deleteResourceServerRequest))
+
+		deleteResourceServerResponse, err = cognitoSvc.DeleteResourceServer(deleteResourceServerRequest)
+
+		if err != nil {
+			log.Errorw("Cognito DeleteResourceServer Error", "Error", structs.Map(err))
+		}
+
+		log.Infow("Cognito DeleteResourceServer Response", "Response", structs.Map(deleteResourceServerResponse))
+
 		deleteUserPoolDomainResponse := &cognito.DeleteUserPoolDomainOutput{}
 		deleteUserPoolDomainRequest := &cognito.DeleteUserPoolDomainInput{
 			Domain:     &authDomain,
 			UserPoolId: &userPoolId,
 		}
-
-		log.Infow("", "Request", )
-		log.Errorw("", "Error", err)
-		log.Infow("", "Response", )
 
 		log.Infow("Cognito DeleteUserPoolDomain Request", "Request", structs.Map(deleteUserPoolDomainRequest))
 
