@@ -10,10 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"go.smartmachine.io/awsci-api/pkg/ssm"
 	"go.smartmachine.io/awsci-api/pkg/util"
+	cognitoSession "go.smartmachine.io/awsci-api/pkg/session"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"io/ioutil"
-	"time"
 )
 
 type LoginRequest struct {
@@ -23,14 +23,6 @@ type LoginRequest struct {
 type LoginResponse struct {
 	AccessToken string `json:"access_token"`
 	User        string `json:"user"`
-}
-
-type Session struct {
- 	User         string    `json:"user"`
-	AccessToken  string    `json:"access_token"`
-	TokenType    string    `json:"token_type"`
-	RefreshToken string    `json:"refresh_token"`
-	Expiry       time.Time `json:"expiry"`
 }
 
 var cognitoConfig = &oauth2.Config{
@@ -112,7 +104,7 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 		SharedConfigState: session.SharedConfigEnable,
 	}))
 
-	ciSession := Session{
+	ciSession := cognitoSession.Session{
 		User:         user,
 		AccessToken:  curTok.AccessToken,
 		TokenType:    curTok.TokenType,
