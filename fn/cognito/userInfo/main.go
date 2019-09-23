@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/fatih/structs"
+	"go.smartmachine.io/awsci-api/pkg/oauth"
 	"go.uber.org/zap"
+	"io/ioutil"
 )
 
 type UserInfoRequest struct{
@@ -23,24 +25,32 @@ func UserInfo(ctx context.Context, request UserInfoRequest) (*UserInfoResponse, 
 
 	log.Infow("UserInfo()", "Request", request)
 
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
+	client, err := oauth.GetOauthClient(*request.AccessToken)
+	if err != nil {
+		log.Errorw("unable to obtain oauth client", "Error", structs.Map(err))
+		return nil, err
+	}
 
-	dbSvc := dynamodb.New(sess)
-	
-	dbSvc.GetItem(&dynamodb.GetItemInput{
-		AttributesToGet:          nil,
-		ConsistentRead:           nil,
-		ExpressionAttributeNames: nil,
-		Key:                      nil,
-		ProjectionExpression:     nil,
-		ReturnConsumedCapacity:   nil,
-		TableName:                nil,
-	})
+	resp, err := client.Get("https://auth.awsci.io/oauth2/userInfo")
 
+	if err != nil {
+		return nil, err
+	}
 
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Errorw("error reading body", "Error", err)
+		return nil, err
+	}
 
+	userInfo := make(map[string]interface{})
+	err = json.Unmarshal(body, &userInfo)
+	if err != nil {
+		log.Errorw("error unmarshalling json", "Error", err)
+		return nil, err
+	}
+
+	log.Infow("Cognito userInfo", "userInfo", userInfo)
 
 	return &UserInfoResponse{}, nil
 

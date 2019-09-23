@@ -5,12 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"go.smartmachine.io/awsci-api/pkg/oauth"
 	"go.smartmachine.io/awsci-api/pkg/ssm"
 	"go.smartmachine.io/awsci-api/pkg/util"
-	cognitoSession "go.smartmachine.io/awsci-api/pkg/session"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"io/ioutil"
@@ -23,14 +20,6 @@ type LoginRequest struct {
 type LoginResponse struct {
 	AccessToken string `json:"access_token"`
 	User        string `json:"user"`
-}
-
-var cognitoConfig = &oauth2.Config{
-	Endpoint:     oauth2.Endpoint{
-		AuthURL:   "https://auth.awsci.io/oauth2/authorize",
-		TokenURL:  "https://auth.awsci.io/oauth2/token",
-		AuthStyle: oauth2.AuthStyleAutoDetect,
-	},
 }
 
 func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
@@ -54,10 +43,12 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 
 	log.Infow("retrieved client info", "Info", info)
 
-	cognitoConfig.ClientID = *info.ClientID
-	cognitoConfig.RedirectURL = *info.CallbackURL
+	cognitoConfig, err := oauth.NewCognitoConfig()
+	if err != nil {
+		return nil, err
+	}
 
-	token, err := cognitoConfig.Exchange(oauth2.NoContext, request.Code)
+	token, err := cognitoConfig.Exchange(context.Background(), request.Code)
 	if err != nil {
 		if _, ok := err.(*oauth2.RetrieveError); ok {
 			return nil, fmt.Errorf("oauth2 token exchange error")
@@ -67,8 +58,8 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 
 	log.Infow("obtained token", "Token", token)
 
-	tokenSource := cognitoConfig.TokenSource(oauth2.NoContext, token)
-	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	tokenSource := cognitoConfig.TokenSource(context.Background(), token)
+	oauthClient := oauth2.NewClient(context.Background(), tokenSource)
 
 	resp, err := oauthClient.Get("https://auth.awsci.io/oauth2/userInfo")
 
@@ -95,16 +86,12 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 
 	curTok, err := tokenSource.Token()
 	if err != nil {
-		return nil, util.NewError(fmt.Sprintf("tokensource error: %+v", err), 400)
+		return nil, err
 	}
 
 	log.Infow("current token", "Token", curTok )
 
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
-
-	ciSession := cognitoSession.Session{
+	ciSession := oauth.CognitoSession{
 		User:         user,
 		AccessToken:  curTok.AccessToken,
 		TokenType:    curTok.TokenType,
@@ -112,17 +99,10 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 		Expiry:       curTok.Expiry,
 	}
 
-	item, err := dynamodbattribute.MarshalMap(ciSession)
-
-	db := dynamodb.New(sess)
-	tableName := "cognito_sessions2"
-	_, err = db.PutItem(&dynamodb.PutItemInput{
-		Item:     item,
-		TableName: &tableName,
-	})
+	err = ciSession.SaveSession()
 
 	if err != nil {
-		return nil, util.NewError(fmt.Sprintf("dynamodb.PutItem error: %+v", err), 400)
+		return nil, err
 	}
 
 	return &LoginResponse{

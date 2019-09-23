@@ -1,6 +1,7 @@
 VERSION := $(shell git describe --tags --dirty)
 COMMIT := $(shell git rev-parse --short HEAD)
 GOFILES := $(shell find . -not -path './vendor*' -type f -name '*.go')
+PKGFILES := $(shell find ./pkg -type f -name '*.go')
 GOOS := GOOS=linux
 GOARCH := GOARCH=amd64
 TEST_STAMP := .test.stamp
@@ -26,7 +27,7 @@ $(TEST_STAMP): $(GOFILES)
 	@touch $@
 
 .SECONDEXPANSION:
-$(BINARIES): fn/$$(subst -,/,$$@)/main.go
+$(BINARIES): fn/$$(subst -,/,$$@)/main.go $(PKGFILES)
 	$(info Compiling $@ lambda)
 	@$(GOOS) $(GOARCH) go build -o $@ ./$(subst /main.go,,$<)
 
