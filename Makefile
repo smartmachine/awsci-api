@@ -29,7 +29,7 @@ $(TEST_STAMP): $(GOFILES)
 .SECONDEXPANSION:
 $(BINARIES): fn/$$(subst -,/,$$@)/main.go $(PKGFILES)
 	$(info Compiling $@ lambda)
-	@$(GOOS) $(GOARCH) go build -o $@ ./$(subst /main.go,,$<)
+	$(GOOS) $(GOARCH) go build -o $@ ./$(subst /main.go,,$<)
 
 $(ZIPS): %.zip: %
 	$(info Packaging $@)

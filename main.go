@@ -1,5 +1,7 @@
 package main
 
+// +build ignore
+
 import "log"
 
 func main() {

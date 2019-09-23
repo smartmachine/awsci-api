@@ -10,7 +10,6 @@ import (
 	"go.smartmachine.io/awsci-api/pkg/ssm"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -71,7 +70,7 @@ func (cognitoSession CognitoSession) SaveSession() error {
 	return nil
 }
 
-func GetOauthClient(bearerToken string) (*http.Client, error) {
+func GetOauthTokenSource(ctx context.Context, bearerToken string) (oauth2.TokenSource, error) {
 	// Setup structured logging
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
@@ -128,7 +127,7 @@ func GetOauthClient(bearerToken string) (*http.Client, error) {
 		return nil, err
 	}
 
-	tokenSource := config.TokenSource(context.Background(), token)
+	tokenSource := config.TokenSource(ctx, token)
 	newTok, err := tokenSource.Token()
 	if err != nil {
 		log.Errorw("unable to obtain token", "Error", structs.Map(err))
@@ -144,6 +143,6 @@ func GetOauthClient(bearerToken string) (*http.Client, error) {
 		}
 	}
 
-	return oauth2.NewClient(context.Background(), tokenSource), nil
+	return tokenSource, nil
 }
 

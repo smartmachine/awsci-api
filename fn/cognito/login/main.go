@@ -19,7 +19,6 @@ type LoginRequest struct {
 
 type LoginResponse struct {
 	AccessToken string `json:"access_token"`
-	User        string `json:"user"`
 }
 
 func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
@@ -48,7 +47,7 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 		return nil, err
 	}
 
-	token, err := cognitoConfig.Exchange(context.Background(), request.Code)
+	token, err := cognitoConfig.Exchange(ctx, request.Code)
 	if err != nil {
 		if _, ok := err.(*oauth2.RetrieveError); ok {
 			return nil, fmt.Errorf("oauth2 token exchange error")
@@ -58,8 +57,8 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 
 	log.Infow("obtained token", "Token", token)
 
-	tokenSource := cognitoConfig.TokenSource(context.Background(), token)
-	oauthClient := oauth2.NewClient(context.Background(), tokenSource)
+	tokenSource := cognitoConfig.TokenSource(ctx, token)
+	oauthClient := oauth2.NewClient(ctx, tokenSource)
 
 	resp, err := oauthClient.Get("https://auth.awsci.io/oauth2/userInfo")
 
@@ -80,9 +79,8 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 		return nil, err
 	}
 
-	user := userInfo["username"].(string)
-
 	log.Infow("Cognito userInfo", "userInfo", userInfo)
+	user := userInfo["username"].(string)
 
 	curTok, err := tokenSource.Token()
 	if err != nil {
@@ -107,7 +105,6 @@ func Login(ctx context.Context, request *LoginRequest) (*LoginResponse, error) {
 
 	return &LoginResponse{
 		AccessToken: curTok.AccessToken,
-		User:        user,
 	}, nil
 
 }
